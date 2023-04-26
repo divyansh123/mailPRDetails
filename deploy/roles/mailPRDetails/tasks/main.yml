@@ -1,0 +1,27 @@
+- name: Get list of PRs for a given repo
+  uri:
+    url: "https://bitbucket.global.standardchartered.com/rest/api/latest/projects/{{ project }}/repos/{{ repo }}/pull-requests?state=all&limit=100"
+    headers:
+      Authorization: "Bearer {{ token }}"
+  register: PRDetails
+
+- name: Set last week timestamp
+  set_fact:
+    one_week_back_epoch: "{{ ( ansible_date_time.epoch | int - ( numberOfDaysToConsider | int )*24*60*60 ) }}"
+
+- name: Set mail body content
+  set_fact:
+    mailBody: "<strong>PR #</strong> {{ item.id }} <strong>Title:</strong> {{ item.title }} <strong>From:</strong> {{ item.fromRef.displayId }} <strong>To:</strong> {{ item.toRef.displayId }} <strong>PR Link:</strong> {{ item.links.self[0].href }} <strong>State:</strong> {{ item.state }} <strong>Last Updated Time:</strong> {{ '%a %d %b %Y, %I:%M%p' | strftime((item.updatedDate)/1000) }} <br>{{ mailBody }}"
+  with_items: "{{ PRDetails.json['values'] }}"
+  no_log: true
+  when: ( one_week_back_epoch | int ) <= ( (item.updatedDate)/1000 | int )
+
+- name: Send email with PR details
+  mail:
+    host: 10.23.222.83
+    port: 2525
+    to: "{{ toId }}"
+    from: github-admin@github.com
+    subject: "PR report of {{ repo }} for last {{ numberOfDaysToConsider }} days"
+    body: "{{ mailBody }}"
+    subtype: html
